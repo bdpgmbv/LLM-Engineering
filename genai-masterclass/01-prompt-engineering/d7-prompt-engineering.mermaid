@@ -1,0 +1,67 @@
+graph TB
+    Query([User Query]) --> Classify{Query Complexity?}
+    
+    Classify -->|Simple factual| ZS[Zero-Shot<br/>$0.001 / 85-92%]
+    Classify -->|Needs specific format| FS[Few-Shot<br/>$0.005 / +5-15%]
+    Classify -->|Math / logic / policy| CoT[Chain-of-Thought<br/>$0.002 / +10-25%]
+    Classify -->|High-stakes decision| SC[Self-Consistency<br/>$0.005 x5 / ~95%]
+    Classify -->|Architecture / strategy| ToT[Tree-of-Thought<br/>$0.003 x3 / best path]
+    
+    ZS --> Accuracy{Accuracy > 90%?}
+    Accuracy -->|Yes| Ship[Ship It]
+    Accuracy -->|No| FS
+    
+    FS --> FmtOK{Format correct?}
+    FmtOK -->|Yes| Ship
+    FmtOK -->|No| Structured
+    
+    subgraph Structured [Structured Output]
+        XML[XML Tags<br/>Any model] 
+        JSON[JSON Mode<br/>API feature]
+        Instructor[instructor + Pydantic<br/>INDUSTRY STANDARD]
+        Outlines[Outlines<br/>Local models only]
+    end
+    
+    CoT --> Verify{Need certainty?}
+    Verify -->|No| Ship
+    Verify -->|Yes| SC
+    
+    SC --> Ship
+    ToT --> Ship
+    
+    Ship --> SystemPrompt
+    
+    subgraph SystemPrompt [System Prompt — 4 Pillars]
+        Persona[Persona: who you are]
+        Constraints[Constraints: what you never do]
+        Format[Format: how you respond]
+        Guardrails[Guardrails: edge cases]
+    end
+    
+    SystemPrompt --> InjectionDefense
+    
+    subgraph InjectionDefense [Injection Defense — 4 Layers]
+        direction TB
+        ID1[Layer 1: Delimiters ~70%<br/>User input in tagged box]
+        ID2[Layer 2: Sanitize ~90%<br/>Strip attack patterns]
+        ID3[Layer 3: Hierarchy ~98%<br/>Unbreakable system rules]
+        ID4[Layer 4: Output Scan ~99.9%<br/>Check response for leaks]
+        ID1 --> ID2 --> ID3 --> ID4
+    end
+    
+    InjectionDefense --> Response([Safe Response])
+    
+    subgraph Versioning [Prompt Lifecycle]
+        Git[Git + PR Review] --> Test[Golden Dataset Test]
+        Test --> Canary[Canary 10%]
+        Canary --> Deploy[Full Deploy]
+    end
+
+    style ZS fill:#3fb950,color:#fff
+    style FS fill:#1f6feb,color:#fff
+    style CoT fill:#8957e5,color:#fff
+    style SC fill:#d29922,color:#fff
+    style ToT fill:#da3633,color:#fff
+    style Instructor fill:#3fb950,color:#fff
+    style Ship fill:#3fb950,color:#fff
+    style ID4 fill:#3fb950,color:#fff

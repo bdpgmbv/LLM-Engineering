@@ -1,0 +1,58 @@
+graph TB
+    Dev([Developer Edits Prompt]) --> Git[Git Commit + PR]
+    
+    Git --> Review[Peer Review<br/>Human checks prompt changes]
+    
+    Review -->|Approved| CI[CI Pipeline Triggers]
+    Review -->|Rejected| Dev
+    
+    subgraph CI [Automated Test Suite]
+        Golden[Golden Dataset<br/>200+ test cases] --> Run[Run All Tests<br/>temp=0 for determinism]
+        Run --> Assert[Assertions:<br/>contains / not-contains /<br/>BERTScore / LLM-judge]
+    end
+    
+    Assert --> Gate{Quality Gate}
+    
+    Gate -->|Faithfulness < 90%| BLOCK[DEPLOY BLOCKED<br/>Fix before proceeding]
+    Gate -->|Accuracy dropped > 2%| BLOCK
+    Gate -->|All pass| Canary
+    
+    BLOCK --> Dev
+    
+    subgraph Canary [Canary Deploy]
+        C10[10% traffic → new version<br/>90% → current version]
+        C10 --> Monitor24[Monitor 24 hours]
+    end
+    
+    Monitor24 --> CanaryGate{Canary Check}
+    
+    CanaryGate -->|Metrics healthy| Rollout50[50% traffic]
+    CanaryGate -->|Degradation| Rollback[Instant Rollback<br/>revert git commit]
+    
+    Rollout50 --> Full[100% traffic<br/>New version is now production]
+    Rollback --> Dev
+    
+    Full --> OngoingMonitor
+    
+    subgraph OngoingMonitor [Production Monitoring]
+        Dashboard[Dashboard:<br/>latency p50/p95/p99<br/>error rate<br/>cost vs budget]
+        Weekly[Weekly: sample 1% traffic<br/>LLM-as-judge quality score]
+        Nightly[Nightly: re-run golden tests<br/>catch provider model updates]
+    end
+    
+    OngoingMonitor -->|Issue detected| Alert[Alert → Dev]
+    Alert --> Dev
+    
+    subgraph Version Registry
+        V1[prompt-v1 — archived]
+        V2[prompt-v2 — production]
+        V3[prompt-v3 — staging]
+    end
+
+    style Git fill:#8957e5,color:#fff
+    style Gate fill:#d29922,color:#fff
+    style BLOCK fill:#da3633,color:#fff
+    style Canary fill:#d29922,color:#000
+    style Full fill:#3fb950,color:#fff
+    style Rollback fill:#da3633,color:#fff
+    style Dashboard fill:#1f6feb,color:#fff

@@ -1,0 +1,80 @@
+graph TB
+    Need([Need Better LLM Performance]) --> WhatKind{What do you need?}
+    
+    WhatKind -->|Different BEHAVIOR<br/>format, tone, style| FT[Fine-Tune]
+    WhatKind -->|New KNOWLEDGE<br/>facts, docs, policies| RAG[Use RAG<br/>No training needed]
+    WhatKind -->|Deep DOMAIN understanding<br/>medical, legal, finance| Full[Full Pipeline:<br/>CPT → SFT → DPO]
+    WhatKind -->|Just needs better output<br/>< 500 examples available| Prompts[Better Prompts First<br/>Not enough data yet]
+    
+    FT --> HaveGPU{Have GPU?}
+    
+    HaveGPU -->|No| API
+    HaveGPU -->|Yes| Local
+    
+    subgraph API [API Fine-Tuning — No GPU]
+        OpenAI_FT[OpenAI Fine-Tuning<br/>Upload JSONL, ~$25/1M tokens<br/>Fine-tuned mini often beats base 4o]
+        Together_FT[Together AI<br/>Llama/Mistral, ~$5-10/1M<br/>Download the model after]
+    end
+    
+    subgraph Local [Self-Hosted — Full Control]
+        QLoRA_Path[QLoRA — THE DEFAULT<br/>0.1% params trained<br/>95-99% quality<br/>70B fits on 1 GPU]
+        LoRA_Path[LoRA<br/>0.1% params, more VRAM]
+        FullFT[Full Fine-Tune<br/>100% params, 4+ GPUs<br/>Only if QLoRA gap > 2%]
+    end
+    
+    QLoRA_Path --> Unsloth[Unsloth<br/>2x faster, 60% less memory<br/>Always use]
+    LoRA_Path --> Unsloth
+    
+    subgraph Data [Data Pipeline]
+        direction TB
+        Seeds[5 Seed Examples] --> SelfInstruct[Self-Instruct<br/>GPT-4 generates thousands]
+        SelfInstruct --> EvolInstruct[Evol-Instruct<br/>Progressive difficulty]
+        EvolInstruct --> Judge[LLM-as-Judge<br/>Score 1-10, keep 7+]
+        Judge --> Dedup[Dedup + Diversity Check]
+        Dedup --> Format{Format}
+        Format --> Alpaca[Alpaca<br/>Single-turn]
+        Format --> ShareGPT[ShareGPT<br/>Multi-turn chat]
+        Format --> ChatML[ChatML<br/>Production standard]
+    end
+    
+    Unsloth --> SFT[SFT Training<br/>Instruction following]
+    FullFT --> SFT
+    API --> SFT
+    
+    SFT --> Alignment{Need alignment?}
+    
+    Alignment -->|Have preference pairs| DPO[DPO<br/>Modern standard<br/>5K-10K pairs]
+    Alignment -->|Have thumbs up/down| KTO[KTO<br/>Easiest data]
+    Alignment -->|Max quality budget| RLHF[RLHF/PPO<br/>Complex but best]
+    Alignment -->|No humans available| RLAIF[RLAIF<br/>GPT-4 judges<br/>80% quality, 10% cost]
+    Alignment -->|No| Deploy
+    
+    DPO --> Deploy
+    KTO --> Deploy
+    RLHF --> Deploy
+    RLAIF --> Deploy
+    
+    subgraph Deploy [Deployment]
+        Merge[Merge LoRA Adapters<br/>Zero inference overhead]
+        Merge --> Quantize[Quantize to 4-bit<br/>Distill + quantize = 100x cheaper]
+        Quantize --> Serve[Serve via vLLM]
+    end
+    
+    Full --> CPT[Continued Pre-Training<br/>Feed raw domain text<br/>80% domain + 20% general]
+    CPT --> SFT
+    
+    subgraph Cost [Cost Reality]
+        C1[1K synthetic examples: $5-10]
+        C2[Manual writing: $2,000+]
+        C3[7B QLoRA training: ~$8]
+        C4[70B QLoRA training: ~$8]
+        C5[70B full fine-tune: ~$640]
+    end
+
+    style QLoRA_Path fill:#3fb950,color:#fff
+    style Unsloth fill:#3fb950,color:#fff
+    style DPO fill:#1f6feb,color:#fff
+    style RAG fill:#8957e5,color:#fff
+    style Prompts fill:#d29922,color:#fff
+    style SFT fill:#1f6feb,color:#fff
+    style Merge fill:#3fb950,color:#fff

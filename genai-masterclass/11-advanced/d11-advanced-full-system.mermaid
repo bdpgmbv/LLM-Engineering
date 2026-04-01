@@ -1,0 +1,112 @@
+graph TB
+    User([User / App / API]) --> MCP_Client
+    
+    subgraph MCP [MCP — Universal Tool Protocol]
+        MCP_Client[MCP Client<br/>Discovers + calls tools] --> MCP_Server1[MCP Server: DB<br/>search, read, write]
+        MCP_Client --> MCP_Server2[MCP Server: APIs<br/>Slack, Drive, GitHub]
+        MCP_Client --> MCP_Server3[MCP Server: Custom<br/>Your internal tools]
+    end
+    
+    MCP_Client --> Gateway
+    
+    subgraph CompoundAI [Compound AI System]
+        Gateway[LiteLLM Gateway<br/>Multi-provider + fallback]
+        
+        Gateway --> SemanticCache{Semantic Cache<br/>30-40% hit rate}
+        SemanticCache -->|HIT| Response
+        SemanticCache -->|MISS| Router
+        
+        Router[Complexity Router<br/>rules / classifier] -->|Simple 70%| CheapPath
+        Router -->|Complex 30%| ExpensivePath
+        Router -->|Multi-hop| GraphPath
+        
+        subgraph CheapPath [Simple Path — $0.001/query]
+            BM25[BM25 Retriever<br/>FREE] --> Mini[GPT-4o-mini]
+        end
+        
+        subgraph ExpensivePath [Complex Path — $0.03/query]
+            Hybrid[Hybrid Search<br/>Dense + BM25 + RRF] --> Rerank[Reranker<br/>+10-20% precision]
+            Rerank --> GPT4[GPT-4o]
+        end
+        
+        subgraph GraphPath [Knowledge Graph Path]
+            EntityQ[Entity Detection] --> Neo4j[(Neo4j Graph DB)]
+            Neo4j --> Traverse[Multi-hop Traversal<br/>Bob → Alice → Carol]
+            Traverse --> GPT4_G[GPT-4o + Graph Context]
+        end
+    end
+    
+    Mini --> Guardrails
+    GPT4 --> Guardrails
+    GPT4_G --> Guardrails
+    
+    subgraph Safety [Safety Layer]
+        Guardrails[Input: Moderation + PII Redact + Injection Defense]
+        Guardrails --> OutputCheck[Output: PII Scan + Faithfulness + Policy]
+    end
+    
+    OutputCheck --> Response([Response])
+    
+    subgraph LLMOps [LLMOps Pipeline]
+        direction TB
+        PromptGit[Prompts in Git<br/>PR review] --> GoldenTest[Golden Dataset<br/>200+ tests]
+        GoldenTest -->|Pass| CanaryDeploy[Canary 10%<br/>24h monitor]
+        GoldenTest -->|Fail| Block[Block Deploy]
+        CanaryDeploy -->|Healthy| FullDeploy[100% Rollout]
+        CanaryDeploy -->|Degraded| Rollback[Instant Rollback]
+    end
+    
+    subgraph Monitoring [Production Monitoring]
+        Latency[Latency p50/p95/p99]
+        Errors[Error Rate < 2%]
+        Cost[Cost vs Budget]
+        Faith[Faithfulness > 90%<br/>Weekly 1% sampling]
+        Bias[Monthly Bias Audit]
+    end
+    
+    Response --> Monitoring
+    
+    subgraph DataLayer [Data Architecture]
+        VectorDB[(Qdrant<br/>Embeddings)]
+        Postgres[(PostgreSQL<br/>Structured data)]
+        S3[(S3 / MongoDB<br/>Raw documents)]
+        
+        subgraph EmbeddingPipeline [Embedding Pipeline]
+            Extract[Extract] --> Chunk[Chunk<br/>Recursive + Parent-Child]
+            Chunk --> Dedup[Dedup<br/>Content hash]
+            Dedup --> EmbedStore[Embed + Store<br/>with metadata]
+        end
+        
+        EmbedStore --> VectorDB
+    end
+    
+    subgraph LocalLLM [Local / Edge Option]
+        Ollama[Ollama<br/>ollama run llama3]
+        LlamaCpp[llama.cpp<br/>CPU inference]
+        MLX_Local[MLX<br/>Apple Silicon]
+    end
+    
+    Gateway -.->|Privacy / offline<br/>/ development| LocalLLM
+    
+    subgraph Distillation [Model Optimization]
+        Teacher[GPT-4 labels 10K examples<br/>$300] --> Student[Fine-tune Llama-8B<br/>$50]
+        Student --> Quantize[Quantize to 4-bit<br/>100x cheaper than GPT-4]
+        Quantize --> vLLM[Deploy via vLLM<br/>2-4x throughput]
+    end
+    
+    subgraph MoE [Mixture of Experts]
+        Mixtral[Mixtral 8x7B<br/>47B knowledge<br/>13B compute per token<br/>Best self-hosting value]
+    end
+    
+    vLLM --> Gateway
+    Mixtral --> Gateway
+
+    style Gateway fill:#1f6feb,color:#fff
+    style SemanticCache fill:#d29922,color:#fff
+    style Router fill:#8957e5,color:#fff
+    style Guardrails fill:#da3633,color:#fff
+    style Response fill:#3fb950,color:#fff
+    style MCP_Client fill:#1f6feb,color:#fff
+    style FullDeploy fill:#3fb950,color:#fff
+    style Block fill:#da3633,color:#fff
+    style Faith fill:#da3633,color:#fff

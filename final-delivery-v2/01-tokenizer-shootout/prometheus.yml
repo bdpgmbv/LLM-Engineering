@@ -1,0 +1,10 @@
+# Prometheus configuration
+# "Go to http://app:8000/metrics every 15 seconds and collect the numbers"
+
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "tokenizer-benchmark"
+    static_configs:
+      - targets: ["app:8000"]

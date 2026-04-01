@@ -1,0 +1,59 @@
+graph TB
+    Client([Client App]) --> LB[Load Balancer]
+    LB --> Gateway[LiteLLM Gateway]
+    
+    Gateway --> RateLimit[Rate Limiter<br/>20/min per user]
+    RateLimit --> ExactCache{Exact Cache<br/>Redis}
+    
+    ExactCache -->|HIT| Response([Response])
+    ExactCache -->|MISS| CB[Circuit Breaker]
+    
+    CB --> Primary
+    CB -->|Primary DOWN| Backup
+    CB -->|Both DOWN| Emergency
+    
+    subgraph Primary [Primary - OpenAI]
+        GPT4o[GPT-4o / GPT-4o-mini]
+    end
+    
+    subgraph Backup [Backup - Anthropic]
+        Claude[Claude Sonnet / Haiku]
+    end
+    
+    subgraph Emergency [Emergency - Local]
+        Llama[Llama-3 via Ollama<br/>Self-hosted]
+    end
+    
+    GPT4o --> Retry{Retry Logic}
+    Claude --> Retry
+    Llama --> Retry
+    
+    Retry -->|Success| Log
+    Retry -->|Fail after 3x| NextProvider[Try Next Provider]
+    NextProvider --> CB
+    
+    Log[Audit Log<br/>Every call tracked] --> Monitor[Monitor Dashboard]
+    
+    subgraph Monitor Dashboard
+        Latency[p50/p95/p99 Latency]
+        Errors[Error Rate per Provider]
+        Cost[Cost per Provider]
+        Health[Provider Health %]
+    end
+    
+    Monitor --> Response
+    
+    subgraph Retry Logic Detail
+        R1[Attempt 1 → wait 1s]
+        R2[Attempt 2 → wait 2s + jitter]
+        R3[Attempt 3 → wait 4s + jitter]
+        R1 --> R2 --> R3
+    end
+
+    style Gateway fill:#1f6feb,color:#fff
+    style CB fill:#d29922,color:#fff
+    style RateLimit fill:#8957e5,color:#fff
+    style Primary fill:#3fb950,color:#000
+    style Backup fill:#d29922,color:#000
+    style Emergency fill:#da3633,color:#fff
+    style Log fill:#3fb950,color:#fff

@@ -1,0 +1,79 @@
+graph TB
+    subgraph Input Sources
+        Text[Text Documents]
+        Images[Images / Charts / Screenshots]
+        Audio[Audio / Meetings / Calls]
+        Tables[Tables / Spreadsheets]
+        PDF[Scanned PDFs]
+        Video[Video — emerging]
+    end
+    
+    subgraph Convert to Text [Step 1: Convert Everything to Text]
+        Text -->|Already text| TextChunks[Text Chunks]
+        Tables -->|Markdown format| TextChunks
+        Images -->|GPT-4o describes<br/>~$0.01/image| TextChunks
+        Audio -->|Whisper transcribes<br/>$0.006/min| TextChunks
+        PDF -->|OCR: Tesseract /<br/>AWS Textract| TextChunks
+        Video -->|Frame extraction +<br/>GPT-4o + Whisper| TextChunks
+    end
+    
+    TextChunks --> Embed
+    
+    subgraph Unified Embedding [Step 2: Embed All as Text]
+        Embed[Embedding Model<br/>text-embedding-3-small]
+        Embed --> VDB[(Vector Database<br/>All content types together)]
+    end
+    
+    User([User Query]) --> QueryEmbed[Embed Query]
+    QueryEmbed --> Search
+    
+    subgraph Search [Step 3: Unified Search]
+        VDB --> Dense[Dense Search]
+        BM25_Store[(BM25 Index)] --> Sparse[Sparse Search]
+        Dense --> Merge[RRF Merge]
+        Sparse --> Merge
+    end
+    
+    Merge --> Results
+    
+    subgraph Results [Results with Source Types]
+        R_Text[📝 Text chunk]
+        R_Table[📊 Table markdown]
+        R_Image[📈 Image description]
+        R_Audio[🎙️ Audio transcript]
+    end
+    
+    Results --> Generator[LLM Generator<br/>Answers from mixed sources]
+    Generator --> Response([Response with<br/>multi-source citations])
+    
+    subgraph Vision Models [Vision-Language Models]
+        GPT4o[GPT-4o: best all-rounder<br/>detail:low = 85 tokens $0.00001<br/>detail:high = 1000+ tokens]
+        Claude_V[Claude Vision:<br/>dense documents]
+        Gemini[Gemini: multi-image<br/>large context]
+    end
+    
+    subgraph Image Gen [Image Generation]
+        DALLE[DALL-E 3: $0.04/img<br/>best prompt understanding]
+        SD[Stable Diffusion: ~$0.001/img<br/>your GPU, full control]
+        Mid[Midjourney: most aesthetic]
+    end
+    
+    subgraph Audio Pipeline [Voice Agent Pipeline]
+        direction LR
+        Hear[Whisper<br/>hear] --> Think[LLM<br/>think]
+        Think --> Speak[TTS<br/>speak]
+        Speak -.->|Target: < 1 second<br/>with streaming| Done([User hears])
+    end
+    
+    subgraph Multimodal Embeddings [Alternative: Native Multimodal]
+        CLIP[CLIP / SigLIP<br/>Text + images in SAME<br/>vector space]
+        CLIP --> VisualSearch[Visual search:<br/>text query finds images]
+    end
+
+    style TextChunks fill:#3fb950,color:#fff
+    style Embed fill:#1f6feb,color:#fff
+    style VDB fill:#8957e5,color:#fff
+    style Generator fill:#1f6feb,color:#fff
+    style Response fill:#3fb950,color:#fff
+    style GPT4o fill:#3fb950,color:#fff
+    style DALLE fill:#1f6feb,color:#fff

@@ -1,0 +1,56 @@
+graph TB
+    Start([Your Project Requirements]) --> Q1{Need routing,<br/>loops, or state?}
+    
+    Q1 -->|Yes| Q2{Need human<br/>approval gates?}
+    Q1 -->|No| Q3{Need streaming,<br/>batch, fallbacks?}
+    
+    Q2 -->|Yes| LangGraph[LangGraph<br/>PRODUCTION STANDARD<br/>Flowchart you can run]
+    Q2 -->|No| Q4{Multi-agent<br/>team?}
+    
+    Q4 -->|Yes| LangGraph
+    Q4 -->|No| LangGraph
+    
+    Q3 -->|Yes| LCEL[LCEL / LangChain<br/>Pipe operator<br/>prompt pipe llm pipe parser]
+    Q3 -->|No| Q5{RAG-focused<br/>app?}
+    
+    Q5 -->|Yes| LlamaIndex[LlamaIndex<br/>10x less code for RAG<br/>150+ data connectors]
+    Q5 -->|No| Q6{Simple single<br/>API call?}
+    
+    Q6 -->|Yes| Raw[Raw API<br/>Maximum control<br/>No dependencies]
+    Q6 -->|No| Q7{Azure / .NET<br/>stack?}
+    
+    Q7 -->|Yes| SK[Semantic Kernel<br/>Microsoft SDK<br/>Python + C# + Java]
+    Q7 -->|No| Q8{Need type-safe<br/>NLP pipeline?}
+    
+    Q8 -->|Yes| Haystack[Haystack<br/>Build-time validation<br/>DAG pipelines]
+    Q8 -->|No| Raw
+    
+    subgraph Features [What You Get Free]
+        direction LR
+        LCEL_F[LCEL: .invoke .batch<br/>.stream .with_fallbacks]
+        LG_F[LangGraph: routing, cycles<br/>checkpointing, HITL, streaming]
+        LI_F[LlamaIndex: connectors<br/>indexes, query engines]
+    end
+    
+    subgraph AntiPatterns [5 Anti-Patterns to Avoid]
+        AP1[Framework-first thinking<br/>→ prototype raw first]
+        AP2[Over-abstraction<br/>→ simpler without? skip it]
+        AP3[Vendor lock-in<br/>→ wrap in YOUR interfaces]
+        AP4[Version chasing<br/>→ pin versions, test upgrades]
+        AP5[Multiple frameworks<br/>→ pick ONE primary]
+    end
+    
+    subgraph Ladder [The Ladder]
+        direction LR
+        Step1[Raw API] -->|Need more| Step2[LCEL]
+        Step2 -->|Need more| Step3[LangGraph]
+        Step3 -.->|Stop at simplest<br/>that works| Done([Ship It])
+    end
+
+    style LangGraph fill:#3fb950,color:#fff
+    style LCEL fill:#1f6feb,color:#fff
+    style LlamaIndex fill:#8957e5,color:#fff
+    style Raw fill:#d29922,color:#fff
+    style SK fill:#1f6feb,color:#fff
+    style Haystack fill:#8957e5,color:#fff
+    style Done fill:#3fb950,color:#fff

@@ -1,0 +1,56 @@
+%% ============================================================
+%% D1: Full Production RAG System
+%% ============================================================
+%% Save as: diagrams/rag-production-system.mermaid
+
+graph TB
+    User([User Query]) --> Gateway[LiteLLM Gateway]
+    
+    Gateway --> Cache{Semantic Cache}
+    Cache -->|HIT| Response([Response])
+    Cache -->|MISS| Router[Complexity Router]
+    
+    Router -->|Simple| MiniGen[GPT-4o-mini Generator]
+    Router -->|Complex| FullPipeline[Full RAG Pipeline]
+    
+    FullPipeline --> Hybrid[Hybrid Search]
+    
+    subgraph Retrieval
+        Hybrid --> Dense[Dense Search - Embeddings]
+        Hybrid --> Sparse[Sparse Search - BM25]
+        Dense --> RRF[RRF Merge]
+        Sparse --> RRF
+    end
+    
+    RRF --> Reranker[Cohere Reranker - Top 5]
+    Reranker --> Augment[Context Augmentation]
+    Augment --> Generator[GPT-4o Generator]
+    
+    MiniGen --> Safety
+    Generator --> Safety[Guardrails + PII Check]
+    
+    Safety --> Monitor[Monitor - Tokens, Latency, Cost]
+    Monitor --> Cache
+    Monitor --> Response
+
+    subgraph Vector Store
+        VDB[(Qdrant / pgvector)]
+        Meta[Metadata Filters]
+    end
+    
+    Dense --> VDB
+    Meta --> VDB
+
+    subgraph Embedding Pipeline
+        Docs[Documents] --> Chunk[Recursive Chunker]
+        Chunk --> Embed[Embedding Model]
+        Embed --> Dedup[Dedup - Content Hash]
+        Dedup --> VDB
+    end
+
+    style Gateway fill:#1f6feb,color:#fff
+    style Cache fill:#d29922,color:#fff
+    style Router fill:#8957e5,color:#fff
+    style Safety fill:#da3633,color:#fff
+    style Monitor fill:#3fb950,color:#fff
+    style Response fill:#1f6feb,color:#fff

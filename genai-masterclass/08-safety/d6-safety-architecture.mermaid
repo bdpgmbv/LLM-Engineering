@@ -1,0 +1,67 @@
+graph TB
+    User([User Input]) --> InputLayer
+    
+    subgraph InputLayer [INPUT FILTERING — 4 Layers]
+        L1[Layer 1: OpenAI Moderation API<br/>FREE — blocks harmful content]
+        L1 -->|Pass| L2[Layer 2: PII Detection<br/>Presidio — 30+ entity types]
+        L2 -->|Redact PII| L3[Layer 3: Injection Sanitization<br/>Regex + pattern matching]
+        L3 -->|Clean| L4[Layer 4: Risk Classification<br/>SAFE / SUSPICIOUS / MALICIOUS]
+    end
+    
+    L1 -->|Blocked| SafeResponse
+    L4 -->|MALICIOUS| SafeResponse[Safe Fallback:<br/>I can only help with...]
+    
+    L4 -->|SAFE| LLM
+    L4 -->|SUSPICIOUS| LLM_Cautious[LLM with extra warning<br/>in system prompt]
+    
+    subgraph LLM [LLM Processing]
+        SystemPrompt[System Prompt<br/>with Instruction Hierarchy<br/>Level 1: immutable<br/>Level 2: admin<br/>Level 3: user]
+        Canary[Canary Token<br/>hidden tripwire string]
+        Context[RAG Context<br/>grounded in documents only]
+        SystemPrompt --> Generate[Generate Response]
+        Canary --> Generate
+        Context --> Generate
+    end
+    
+    LLM_Cautious --> Generate
+    
+    Generate --> OutputLayer
+    
+    subgraph OutputLayer [OUTPUT FILTERING]
+        O1[Canary Check<br/>Did the secret string leak?]
+        O1 -->|Clean| O2[PII Output Scan<br/>Catch any PII in response]
+        O2 -->|Clean| O3[Policy Check<br/>Domain-specific rules]
+        O3 -->|Clean| O4[Hallucination Check<br/>Claims supported by context?]
+    end
+    
+    O1 -->|LEAKED| SafeResponse
+    O2 -->|PII Found| Redact[Redact from output]
+    O3 -->|Violation| SafeResponse
+    O4 -->|Unsupported claims| AddDisclaimer[Add uncertainty disclaimer]
+    
+    Redact --> PII_Reinsert
+    O4 -->|All supported| PII_Reinsert[Re-insert real PII<br/>for the user only]
+    AddDisclaimer --> PII_Reinsert
+    
+    PII_Reinsert --> AuditLog[Audit Log<br/>metadata only — no PII stored]
+    SafeResponse --> AuditLog
+    
+    AuditLog --> Response([Response to User])
+    
+    subgraph Monitoring
+        BiasTest[Monthly: Bias Audit<br/>Same prompt + different demographics]
+        RedTeam[Quarterly: Red Team<br/>15+ attack vectors]
+        Faithfulness[Weekly: Faithfulness Sampling<br/>1% of traffic scored]
+    end
+    
+    AuditLog -.-> Monitoring
+
+    style InputLayer fill:#1a1a2e,color:#fff
+    style OutputLayer fill:#1a1a2e,color:#fff
+    style L1 fill:#3fb950,color:#fff
+    style L2 fill:#1f6feb,color:#fff
+    style L3 fill:#8957e5,color:#fff
+    style L4 fill:#d29922,color:#fff
+    style SafeResponse fill:#da3633,color:#fff
+    style Canary fill:#d29922,color:#fff
+    style AuditLog fill:#3fb950,color:#fff

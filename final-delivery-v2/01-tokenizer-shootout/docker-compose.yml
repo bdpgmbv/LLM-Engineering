@@ -1,0 +1,35 @@
+# Start everything: docker-compose up --build
+# Then open:
+#   http://localhost:3000  → Grafana dashboard (admin / admin)
+#   http://localhost:9090  → Prometheus query page
+#   http://localhost:8000/metrics → Raw metrics from your app
+
+services:
+
+  # YOUR APP — runs main.py, exposes metrics on port 8000
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+
+  # PROMETHEUS — collects metrics from your app every 15 seconds
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  # GRAFANA — draws charts from Prometheus data
+  # Opens with a pre-built dashboard — no setup needed
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/tokenizer.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards

@@ -1,0 +1,40 @@
+graph TB
+    User([User Query]) --> Classifier[BERT Classifier<br/>$0.0001/call - 20ms]
+    
+    Classifier -->|Simple 70%| SimplePath
+    Classifier -->|Complex 30%| ComplexPath
+    
+    subgraph SimplePath[Simple Path - 70% of traffic]
+        BM25[BM25 Retriever<br/>FREE - 5ms] --> MiniLLM[GPT-4o-mini<br/>$0.001/call - 800ms]
+    end
+    
+    subgraph ComplexPath[Complex Path - 30% of traffic]
+        HybridSearch[Hybrid Search<br/>$0.0005 - 50ms] --> Rerank[Reranker<br/>$0.001 - 200ms]
+        Rerank --> FullLLM[GPT-4o<br/>$0.03/call - 2s]
+    end
+    
+    MiniLLM --> SafetyCheck
+    FullLLM --> SafetyCheck[Safety Scanner<br/>50ms]
+    
+    SafetyCheck -->|Pass| SemanticCache[Semantic Cache<br/>Store for next time]
+    SafetyCheck -->|Blocked| Fallback[Safe Fallback Response]
+    
+    SemanticCache --> Monitor[Cost + Latency Monitor]
+    Fallback --> Monitor
+    Monitor --> Response([Response to User])
+    
+    subgraph Cost Comparison
+        direction LR
+        Compound[Compound: avg $0.003/query]
+        Monolith[Monolith: $0.03/query]
+        Savings[Savings: 90%]
+    end
+
+    style Classifier fill:#8957e5,color:#fff
+    style MiniLLM fill:#1f6feb,color:#fff
+    style FullLLM fill:#da3633,color:#fff
+    style SafetyCheck fill:#da3633,color:#fff
+    style SemanticCache fill:#d29922,color:#fff
+    style Monitor fill:#3fb950,color:#fff
+    style Compound fill:#3fb950,color:#fff
+    style Savings fill:#3fb950,color:#fff,font-weight:bold

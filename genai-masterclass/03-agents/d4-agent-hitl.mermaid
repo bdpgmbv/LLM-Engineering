@@ -1,0 +1,58 @@
+graph TB
+    User([User Message]) --> Classify[Classify Intent<br/>billing / technical / general]
+    
+    Classify -->|Billing| BillingAgent
+    Classify -->|Technical| TechAgent
+    Classify -->|General| GeneralAgent
+    
+    subgraph BillingAgent[Billing Handler]
+        B_Search[Search Pricing DB] --> B_Generate[Generate Response]
+    end
+    
+    subgraph TechAgent[Technical Handler]
+        T_Search[Search Docs + FAQs] --> T_Generate[Generate Response]
+    end
+    
+    subgraph GeneralAgent[General Handler]
+        G_Generate[Generate Response]
+    end
+    
+    B_Generate --> RiskCheck
+    T_Generate --> RiskCheck
+    G_Generate --> RiskCheck
+    
+    RiskCheck{Risk Assessment}
+    
+    RiskCheck -->|LOW: search, info| AutoApprove[Auto-Execute<br/>No human needed]
+    RiskCheck -->|MEDIUM: refund, email| HumanGate[Human Approval Gate<br/>Slack notification]
+    RiskCheck -->|HIGH: delete, admin| Block[Permanently Blocked<br/>Cannot proceed]
+    
+    HumanGate -->|Approved| Execute
+    HumanGate -->|Denied| Deny[Inform User:<br/>Action not approved]
+    HumanGate -->|Timeout 24h| Escalate[Escalate to Manager]
+    
+    AutoApprove --> Execute[Execute Action]
+    Execute --> QualityCheck[Quality Check<br/>LLM scores response 1-10]
+    
+    QualityCheck -->|Score >= 7| Respond([Send to User])
+    QualityCheck -->|Score < 7| Regenerate[Regenerate Response<br/>Max 2 retries]
+    Regenerate --> QualityCheck
+    
+    Block --> AuditLog
+    Deny --> AuditLog
+    Respond --> AuditLog[Audit Log<br/>Every action + decision + reasoning]
+    
+    subgraph Checkpointing
+        State[(LangGraph State<br/>SQLite dev / Postgres prod)]
+    end
+    
+    HumanGate -.-> State
+    Execute -.-> State
+
+    style Classify fill:#8957e5,color:#fff
+    style RiskCheck fill:#d29922,color:#fff
+    style AutoApprove fill:#3fb950,color:#fff
+    style HumanGate fill:#d29922,color:#fff
+    style Block fill:#da3633,color:#fff
+    style QualityCheck fill:#1f6feb,color:#fff
+    style AuditLog fill:#3fb950,color:#fff
