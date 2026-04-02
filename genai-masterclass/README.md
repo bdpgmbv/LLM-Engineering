@@ -22,55 +22,168 @@ docker-compose up --build
 
 ### Techniques
 
-- **Zero-Shot** — just give the instruction, no examples. The simplest and cheapest way to use an LLM. Works **85-92%** of the time on clear tasks. Always start here — if it works, there is nothing else to do
-- **Few-Shot** — show the model 2-3 examples of what good output looks like, then ask your question. Helps when the model gets the format wrong. Costs **3-5× more** because the examples eat up tokens. Only use when zero-shot accuracy drops below 90%
-- **Dynamic Few-Shot** — instead of showing the same 3 examples every time, pick the 3 most relevant examples for each question. A billing question gets billing examples. A tech question gets tech examples. **10-15% better** than fixed examples at similar cost
-- **Chain-of-Thought** — tell the model to think step by step before answering. This helps on math and logic problems (**+15-25% accuracy**) but on simple yes/no questions, it just doubles the cost and adds nothing. Use it only where reasoning is needed
-- **Self-Consistency** — ask the same question 5 times and go with the most common answer. Like getting a second opinion from 5 doctors. Costs **5× more.** Only worth it when being wrong has real consequences — medical, legal, financial decisions
-- **Tree-of-Thought** — instead of one answer, generate 3 completely different approaches (for example: the cheapest option, the fastest option, the highest quality option) and then evaluate which one fits best. Good for **architecture and strategy decisions**
+- **Zero-Shot**
+  - Give the model one instruction with zero examples. The simplest and cheapest way to use an LLM
+  - Works **85-92%** of the time on clear, well-defined tasks
+  - Costs about **$0.001 per call**
+  - Always start here. If accuracy is above 90%, ship it. Do not add complexity unless the numbers demand it
+  - A smarter model with zero-shot **always beats** a weaker model with fancy prompting techniques
+
+- **Few-Shot**
+  - Show the model 2-3 completed examples of good output before asking your question
+  - The model learns the format, tone, and structure from the examples
+  - Improves accuracy by **5-15%** but costs **3-5× more tokens** because the examples take up space
+  - Put the most similar example **last** — the model pays more attention to what it just read
+  - Only use when zero-shot accuracy drops below 90%. If you have 500+ labeled examples, fine-tune instead
+
+- **Dynamic Few-Shot**
+  - Instead of showing the same 3 examples every time, pick the 3 most relevant ones for each question
+  - A billing question gets billing examples. A technical question gets technical examples
+  - **10-15% more accurate** than using fixed examples, at similar cost
+  - Requires a small search step to find matching examples, but the quality improvement is worth it
+
+- **Chain-of-Thought**
+  - Tell the model to think step by step and show its reasoning before giving the final answer
+  - On math and logic problems: **+15-25% accuracy** because the model catches mistakes in its own reasoning
+  - On simple classification ("is this billing or technical?"): **doubles the cost and adds zero benefit**
+  - The rule: route by task type. Use chain-of-thought only where reasoning is genuinely needed
+
+- **Self-Consistency**
+  - Ask the same question 5 times and take the most popular answer as the final response
+  - Like getting a second opinion from 5 doctors and going with the majority
+  - Boosts accuracy by **10-15%** on difficult questions. Costs **5× more**
+  - Smart version: start with 1 call. Only add 4 more if the first answer seems uncertain. Average cost drops to 1.8×
+  - Only justified for decisions where being wrong has real consequences — medical, legal, financial
+
+- **Tree-of-Thought**
+  - Instead of generating one answer, generate 3 completely different approaches
+  - Force genuinely different angles — for example: the cheapest option, the fastest option, the highest quality option
+  - Then evaluate all 3 and pick the best one
+  - Good for **architecture decisions, strategy, and planning** where there is no single right answer
+  - Keep to **3-5 paths maximum.** Beyond that, the returns diminish rapidly
 
 ### System Prompt
 
-- **Structure it in 4 sections:** who the AI is (persona), what it must never do (constraints), how to format answers (format), what to do in emergencies (guardrails). Without this structure, the model follows instructions inconsistently
-- **Put your most important rules at the start and end of the prompt.** The model pays less attention to rules buried in the middle. We tested this — rules in the middle got violated the most
-- **Keep it under 2000 words.** Longer prompts sound more thorough but the model starts forgetting parts of them
-- **Never put secrets or internal rules in the prompt.** Attackers can extract them 30-60% of the time. Treat everything in the prompt as public
-- **Version every prompt in git with code review.** Treat prompt changes the same way you treat code changes — review, test, deploy carefully
+- **4-Section Structure**
+  - Every production system prompt should have 4 sections in this order: who the AI is (persona), what it must never do (constraints), how to format answers (format), what to do in edge cases (guardrails)
+  - Without this structure, the model follows some instructions and ignores others unpredictably
+
+- **Rule Placement**
+  - Put your most important rules at the **start and end** of the prompt
+  - The model pays less attention to rules buried in the middle
+  - We tested this in project 12 — rules placed in the middle were violated the most often
+
+- **Length Limit**
+  - Keep system prompts **under 2,000 words**
+  - Longer prompts sound more thorough but the model actually starts forgetting parts of them
+
+- **Security**
+  - Never put secrets, internal rules, or discount codes in the system prompt
+  - Attackers can extract prompt contents **30-60% of the time** without any defense
+  - Treat everything in the prompt as if it will be seen by the public
+
+- **Version Control**
+  - Store every prompt in git with code review
+  - Treat prompt changes the same way you treat code changes — review, test, deploy carefully
+  - Deploy pipeline: development → testing → staging → send to 10% of users → full rollout
 
 ### Structured Output
 
-- **XML tags** — tell the model to wrap its answer in tags like `<name>...</name>`. Works with any model from any provider. Easy to parse. The most portable option
-- **JSON mode** — a setting in the API that guarantees the model returns valid JSON. The JSON will always be parseable, but there is no guarantee it has the fields you asked for
-- **instructor + Pydantic** — define the exact shape of the output you want as a Python class. The library automatically retries if the model returns the wrong shape. This is the **industry standard** for production systems
-- **Outlines** — controls which tokens the model is allowed to generate, character by character. Guarantees the output matches your exact format with zero retries. Only works with models running on your own hardware
+- **XML Tags**
+  - Tell the model to wrap its answer in tags like `<name>...</name>`
+  - Works with **any model from any provider.** The most portable option
+  - Easy to parse with simple code. Claude follows XML particularly well
+
+- **JSON Mode**
+  - A setting in the API that guarantees the response is valid JSON
+  - The JSON will **always be parseable,** but there is no guarantee it contains the fields you asked for
+  - Available on API models only
+
+- **instructor + Pydantic**
+  - Define the exact shape of the output you want as a Python class
+  - The library automatically retries if the model returns the wrong shape
+  - This is the **industry standard** for production systems that need reliable structured data
+
+- **Outlines**
+  - Controls which tokens the model is allowed to generate, character by character
+  - **Guarantees** the output matches your exact format with zero retries
+  - Only works with models running on your own hardware. The fastest method when available
 
 ### Chaining
 
-- **Sequential** — break a complex task into steps that run one after another (summarize → extract topics → classify sentiment). Each step uses the output from the previous one. Keep it to **2-4 steps** because errors build up
-- **Parallel** — run independent steps at the same time instead of waiting for each one. Same cost, **2-3× faster.** Users notice the speed difference
-- **Map-Reduce** — for documents too big to process at once. Split it into pieces, process each piece separately (the "map" step), then combine all the results (the "reduce" step). Handles **unlimited document sizes**
-- **Mixed-Model** — use the expensive smart model only for the step that needs intelligence, and the cheap model for everything else like formatting or summarizing. Saves **60%** on most chains
+- **Sequential**
+  - Break a complex task into steps that run one after another
+  - Each step uses the output from the previous one (summarize → extract topics → classify sentiment)
+  - Keep to **2-4 steps maximum** because errors build up with each step
+
+- **Parallel**
+  - Run independent steps at the same time instead of waiting for each one to finish
+  - Same cost as sequential, but **2-3× faster.** Users notice the speed difference
+  - Only works when steps do not depend on each other
+
+- **Map-Reduce**
+  - For documents too big to process in one call
+  - Split the document into pieces, process each piece separately (the map step), then combine all results into one final output (the reduce step)
+  - Handles **unlimited document sizes**
+
+- **Mixed-Model**
+  - Use the expensive model only for the step that actually needs intelligence
+  - Use the cheap model for everything else like formatting, cleaning, or summarizing
+  - Saves about **60%** on most multi-step chains. Use this approach every time you chain
 
 ### Prompt Optimization
 
-- **Meta-Prompting** — ask a powerful model like GPT-4 to write your prompt for you. It often writes better prompts than humans because it thinks of edge cases we miss. You pay once to generate the prompt, then use a cheap model to run it forever
-- **Optimize Loops** — start with a draft prompt, see where it fails, tell the model exactly what went wrong, have it rewrite. This works in **3-5 rounds.** If it still fails after 5 rounds, the task definition is the problem, not the prompt
-- **A/B Testing** — run two prompt versions side by side on the same test cases. Pick the winner based on data, not gut feeling. **Re-test every month** because model updates can change which prompt works better
+- **Meta-Prompting**
+  - Ask a powerful model like GPT-4 to write your prompt for you
+  - It often writes better prompts than humans because it thinks of edge cases like sarcasm and ambiguity that we forget
+  - You pay **$0.01 once** to generate the prompt, then use a cheap model to run it forever at **$0.0001 per call**
+
+- **Optimize Loops**
+  - Start with a draft prompt, see where it fails, tell the model exactly what went wrong, have it rewrite
+  - This process works in **3-5 rounds.** If the prompt is still failing after 5 rounds, the problem is the task definition, not the prompt
+
+- **A/B Testing**
+  - Run two prompt versions side by side on the same set of test cases
+  - Pick the winner based on data, not gut feeling
+  - **Re-test every month** because model provider updates can change which prompt works better
 
 ### Templates
 
-- **Jinja2 Templates** — write one prompt with blanks that get filled in per customer. One template can generate **10,000 unique prompts** by filling in different names, issues, priorities, and contexts. Store templates in git like code
-- **Template Inheritance** — create a base template with your safety rules. All other templates inherit from it. This way **nobody can accidentally delete the safety rules** when editing a specific template
-- **Deploy Pipeline** — roll out prompt changes the same way you roll out code: test environment → staging → send to 10% of users first → watch the metrics → full rollout if everything looks good
+- **Jinja2 Templates**
+  - Write one prompt with blanks that get filled in differently for each customer
+  - Use variables (`{{ customer_name }}`), conditions (`{% if priority == "high" %}`), and loops (`{% for item in context %}`)
+  - One template can generate **10,000 unique prompts** by filling in different values
+  - Store templates in git like code
+
+- **Template Inheritance**
+  - Create a base template with your safety rules. All other templates inherit from it automatically
+  - This means **nobody can accidentally delete the safety rules** when editing a specific use-case template
+
+- **Deploy Pipeline**
+  - Roll out template changes the same way you roll out code
+  - Test environment → staging → send to 10% of users first → watch the metrics → full rollout if everything looks good
+  - If metrics drop, roll back instantly
 
 ### Injection Defense — 4 Layers
 
-- **Layer 1: Delimiters** — wrap the user's message inside special tags so the model knows "everything between these tags is user input, not instructions." This alone stops about **70% of attacks**
-- **Layer 2: Sanitize** — before the user's message reaches the model, scan it with regex and remove known attack phrases like "ignore all previous instructions." Stops about **90% of attacks**
-- **Layer 3: Instruction Hierarchy** — mark certain rules as Level 1 (unbreakable) that the model can never override no matter what the user says. Stops about **98% of attacks**
-- **Layer 4: Output Scan** — before sending the response to the user, check if it accidentally contains anything from the system prompt or internal rules. If it does, block it. Stops **99.9% of attacks**
+- **Layer 1: Delimiters**
+  - Wrap the user's message inside special tags so the model knows "everything between these tags is user input, not my instructions"
+  - This alone stops about **70% of injection attacks**
 
-We tested all 4 layers with 12 real attack types. Without defenses: **30-60% breach rate.** With all 4: **under 5%.** This takes about 30 minutes to implement.
+- **Layer 2: Sanitize**
+  - Before the user's message reaches the model, scan it with pattern matching and remove known attack phrases like "ignore all previous instructions"
+  - Combined with layer 1, blocks about **90% of attacks**
+
+- **Layer 3: Instruction Hierarchy**
+  - Mark certain rules as Level 1 (unbreakable) that the model can never override no matter what the user says
+  - Combined with layers 1 and 2, blocks about **98% of attacks**
+
+- **Layer 4: Output Scan**
+  - Before sending the response to the user, check if it accidentally contains anything from the system prompt or internal rules
+  - If it does, block the response and return a safe default
+  - All 4 layers together block **99.9% of attacks**
+
+We tested all 4 layers with 12 real attack types in project 15. Without defenses: **30-60% breach rate.** With all 4: **under 5%.** Takes about 30 minutes to implement. Rate limit users to 20 messages per minute.
 
 ---
 
@@ -78,26 +191,65 @@ We tested all 4 layers with 12 real attack types. Without defenses: **30-60% bre
 
 ### Pipeline
 
-- **How it works:** take your documents, break them into small pieces, convert each piece into numbers (embeddings), store them in a database. When a user asks a question, convert the question into numbers, find the most similar pieces, and give them to the LLM along with the question. The LLM answers using your documents instead of making things up
-- **What matters most:** the way you break documents into pieces (chunking) has **20-30% impact** on accuracy. Fix this first. The search method is second. The LLM prompt is last
-- **Cost:** about **$0.01-0.05 per question.** Takes about 3 seconds end-to-end
+- **How It Works**
+  - Take your documents, break them into small pieces, convert each piece into numbers (embeddings), and store them in a database
+  - When a user asks a question, convert the question into numbers too, find the most similar pieces, and give them to the LLM along with the question
+  - The LLM answers using your documents instead of making things up
+
+- **What Matters Most**
+  - The way you break documents into pieces (chunking) has **20-30% impact** on accuracy. Fix this first
+  - The search method is the second priority
+  - The LLM prompt is the last thing to optimize — it barely matters if you feed the model the wrong documents
+
+- **Cost**
+  - About **$0.01-0.05 per question.** Takes about 3 seconds end-to-end
 
 ### Chunking — How You Break Documents into Pieces
 
-- **Fixed-size** — cut every 200 characters regardless of content. **Never use this.** It splits sentences in half and puts the two halves in different pieces. The LLM sees half an answer and gives the wrong response
-- **Recursive** — try to split at paragraph boundaries first, then sentences, then words. Keeps natural text units together. This is the **right default for 90% of cases**
-- **Semantic** — use AI to detect where the topic changes within a document and split there. Best quality but **100× more expensive** than recursive ($0.10 versus $0.001 per document)
-- **Parent-Child** — create small precise pieces for searching AND keep the original large sections for giving to the LLM. You search the small pieces to find the right spot, then hand the LLM the large section so it has full context. This is the **production standard**
-- **Overlap** — make adjacent pieces share 10-20% of their text so nothing falls through the cracks at the boundary
+- **Fixed-Size**
+  - Cut every 200 characters regardless of content
+  - **Never use this.** It splits sentences in half and puts the two halves in different pieces
+  - The model sees half an answer and gives the wrong response
 
-We proved this matters: same document, same question. Bad chunking gave the wrong answer. Good chunking gave the right answer. The only thing that changed was how we split the document.
+- **Recursive**
+  - Try to split at paragraph boundaries first, then sentence boundaries, then word boundaries
+  - Keeps natural text units together
+  - This is the **right default for 90% of cases**
+
+- **Semantic**
+  - Use AI to detect where the topic changes within a document and split there
+  - Best quality because each piece covers exactly one topic
+  - But **100× more expensive** than recursive ($0.10 versus $0.001 per document)
+
+- **Parent-Child**
+  - Create small precise pieces for searching AND keep the original large sections for giving to the LLM
+  - You search the small pieces to find the right spot, then hand the LLM the large section so it has full context
+  - This is the **production standard.** Small pieces: 512 tokens. Large sections: 1,024 tokens
+
+- **Overlap**
+  - Make adjacent pieces share 10-20% of their text at the boundaries
+  - Prevents important information from falling through the cracks where one piece ends and the next begins
+
+We proved this matters in project 54: same document, same question. Bad chunking gave the wrong answer. Good chunking gave the right answer. The only thing that changed was how we split the document.
 
 ### Embeddings — Converting Text to Numbers
 
-- **text-embedding-3-small** — the most popular model for this. Produces 1,536 numbers per piece of text. **Good enough for 90% of use cases.** Start here
-- **text-embedding-3-large** — produces 3,072 numbers. More precise but costs **6× more** for only **2-5% better** accuracy. Rarely worth it
-- **Matryoshka trick** — take the 1,536 numbers and keep only the first 256. You save **6× on storage** and still retain **95% of the quality**
-- **Important:** if you change your embedding model later, you have to re-process every single document. Choose carefully at the start
+- **text-embedding-3-small**
+  - The most popular embedding model. Produces 1,536 numbers per piece of text
+  - **Good enough for 90% of use cases.** This is where you start
+
+- **text-embedding-3-large**
+  - Produces 3,072 numbers per piece of text. More precise but costs **6× more** for only **2-5% better** accuracy
+  - We tested both in project 20. Rarely worth the extra cost
+
+- **Matryoshka Trick**
+  - Take the 1,536 numbers and keep only the first 256
+  - You save **6× on storage** and still retain **95% of the quality**
+  - Very useful when you have millions of documents
+
+- **Important Warning**
+  - If you change your embedding model later, you have to reprocess every single document in your database
+  - Choose your embedding model carefully at the start
 
 ### Vector Databases — Where You Store the Numbers
 
@@ -108,32 +260,81 @@ We proved this matters: same document, same question. Bad chunking gave the wron
 
 ### Search — How You Find the Right Pieces
 
-- **Dense search (embeddings)** — finds pieces that mean the same thing even if they use different words. "How do I get my money back?" finds a document about "refund policy." But it **completely misses** exact keyword matches like "error code 403"
-- **BM25 (keyword search)** — finds exact word matches. "Error 403" finds documents containing "403." It is **free** and needs no embeddings. But it misses synonyms — "car" will not find "automobile"
-- **Hybrid search** — runs both dense and keyword search, then merges the results. **Catches everything.** This is what every production system should use
-- **Reranking** — after finding the top 20 results, use a smarter model to re-score them and pick the best 5. Adds about 200 milliseconds but improves precision by **10-20%**
+- **Dense Search (Embeddings)**
+  - Finds pieces that mean the same thing even if they use different words
+  - "How do I get my money back?" finds a document about "refund policy"
+  - But it **completely misses** exact keyword matches like "error code 403"
+
+- **BM25 (Keyword Search)**
+  - Finds exact word matches. "Error 403" finds documents containing "403"
+  - It is **free** and needs no embeddings
+  - But it misses synonyms — searching for "car" will not find documents about "automobile"
+
+- **Hybrid Search**
+  - Runs both dense and keyword search at the same time, then merges the results
+  - **Catches everything** — meaning matches and keyword matches
+  - This is what every production system should use. No exceptions
+
+- **Reranking**
+  - After finding the top 20 results, use a smarter model to re-score them and pick the best 5
+  - Adds about 200 milliseconds of latency
+  - But improves precision by **10-20%.** Worth it when accuracy matters
 
 ### Advanced Retrieval
 
-- **Multi-Query** — instead of searching once, rephrase the question 3 different ways and search each version. Combine all results. Finds **15-25% more relevant documents** that the original wording missed. Only 10 lines of code. Always worth doing
-- **HyDE** — generate a hypothetical answer to the question first, then search using that answer instead of the question. Works **10-20% better** on abstract or complex questions
-- **Self-RAG** — check if the question even needs document retrieval. Simple questions like "what is 2+2" do not need it. Skipping retrieval when it is not needed saves **30-50% of cost**
-- **CRAG** — after retrieving documents, grade each one for relevance and throw away the irrelevant ones before giving them to the LLM. Reduces hallucination by **20-40%**
-- **GraphRAG** — build a knowledge graph (a map of entities and their relationships) from your documents. This lets you answer questions that require following a chain across multiple documents, like "who does the new hire ultimately report to?" Regular search cannot do this
+- **Multi-Query**
+  - Instead of searching once, rephrase the question 3 different ways and search each version
+  - Combine all results. Finds **15-25% more relevant documents** that the original wording missed
+  - Only 10 lines of code. Always worth doing
+
+- **HyDE (Hypothetical Document Embeddings)**
+  - Generate a hypothetical answer to the question first, then search using that answer instead of the question
+  - Works **10-20% better** on abstract or complex questions where the question itself does not resemble the document text
+
+- **Self-RAG**
+  - Check if the question even needs document retrieval at all
+  - Simple questions like "what is 2+2" do not need it
+  - Skipping retrieval when not needed saves **30-50% of cost**
+
+- **CRAG (Corrective RAG)**
+  - After retrieving documents, grade each one for relevance
+  - Throw away the irrelevant ones before giving the rest to the LLM
+  - Reduces hallucination by **20-40%** because the model is not distracted by irrelevant information
+
+- **GraphRAG**
+  - Build a knowledge graph (a map of entities and their relationships) from your documents
+  - Lets you answer questions that require following a chain across multiple documents
+  - For example: "Who does Dave ultimately report to?" requires following Dave → Carol → Bob → Alice across 4 documents
+  - Regular search cannot do this. Graph traversal can
 
 ### Multimodal Documents
 
-- **Tables** → convert to markdown. LLMs understand markdown tables surprisingly well
-- **Images** → send to GPT-4o and ask it to describe what it sees. Costs about **$0.01 per image.** The text description becomes searchable
-- **Audio** → transcribe with Whisper. Costs **$0.006 per minute.** Podcasts, meetings, and calls become searchable text
-- **Best practice:** convert everything to text first. This gets **90% of the value** with zero infrastructure changes. Build complex multimodal systems only when that last 10% matters
+- **Tables** — convert to markdown format. LLMs understand markdown tables surprisingly well
+- **Images** — send to GPT-4o and ask it to describe what it sees. Costs about **$0.01 per image.** The text description becomes searchable
+- **Audio** — transcribe with Whisper. Costs **$0.006 per minute.** Podcasts, meetings, and calls become searchable text
+- **Best practice** — convert everything to text first. This gets **90% of the value** with zero infrastructure changes. Build complex multimodal pipelines only when that last 10% matters
 
-### RAGAS Evaluation — How to Know If Your System Actually Works
+### RAGAS Evaluation — How to Know If Your System Works
 
-- **Precision above 80%** — are you retrieving the right documents? If this is low, you are feeding the LLM irrelevant information. Fix your chunking or add reranking
-- **Recall above 75%** — are you retrieving all the relevant documents? If this is low, you are missing documents that contain the answer. Add hybrid search or multi-query retrieval
-- **Faithfulness above 90%** — is the answer based only on the documents you provided? If this is low, **your system is making things up and presenting them as facts.** This is the most dangerous metric to fail. Fix by adding a grounding instruction and requiring citations
-- **Relevance above 85%** — does the answer address what the user actually asked? If this is low, the model is going off-topic. Fix with a better prompt or a more capable model
+- **Precision (target above 80%)**
+  - Are you retrieving the right documents?
+  - If low: you are feeding the LLM irrelevant information that confuses it
+  - Fix with better chunking or add reranking
+
+- **Recall (target above 75%)**
+  - Are you retrieving all the relevant documents?
+  - If low: you are missing documents that contain the answer
+  - Fix with hybrid search or multi-query retrieval
+
+- **Faithfulness (target above 90%)**
+  - Is the answer based only on the documents you provided? Or did the model make things up?
+  - If low: **your system is presenting fabricated information as facts. This is the most dangerous metric to fail**
+  - Fix with a grounding instruction and require citations
+
+- **Relevance (target above 85%)**
+  - Does the answer address what the user actually asked?
+  - If low: the model is going off-topic
+  - Fix with a better prompt or a more capable model
 
 One grounding instruction — "answer ONLY from the provided context. If the answer is not there, say I do not have that information" — drops hallucination from **50-80% to 5-15%.** Always include questions that have no answer in your test suite. If the model never says "I don't know," it is guessing on everything.
 
@@ -143,46 +344,111 @@ One grounding instruction — "answer ONLY from the provided context. If the ans
 
 ### Patterns
 
-- **ReAct** — the agent thinks about what to do, takes one action (like searching a database or calling an API), looks at the result, then decides what to do next. Repeats until the task is done. This is the right choice for **80% of agent tasks.** Simple to build, simple to debug. About **$0.15 per task**
-- **Plan-Execute** — the agent writes a complete plan of all the steps before doing anything, then executes the plan step by step. Better for complex tasks that need **5 or more coordinated steps.** About **$0.30 per task**
-- **Reflexion** — the agent does the task, evaluates its own work, and improves it. Like writing a draft, reviewing it, and rewriting. **Maximum 3 rounds.** If it is still bad after 3, the task description needs to change
+- **ReAct (Reason and Act)**
+  - The agent thinks about what to do, takes one action (like searching or calling an API), looks at the result, then decides what to do next
+  - Repeats until the task is done
+  - The right choice for **80% of agent tasks.** Simple to build, simple to debug
+  - About **$0.15 per task**
+
+- **Plan-Execute**
+  - The agent writes a complete plan of all the steps before doing anything, then executes the plan step by step
+  - Better for complex tasks that need **5 or more coordinated steps**
+  - The upfront planning prevents the agent from going in circles
+  - About **$0.30 per task**
+
+- **Reflexion**
+  - The agent does the task, evaluates its own work, and improves it
+  - Like writing a draft, reviewing it, and rewriting
+  - **Maximum 3 rounds.** If the output is still bad after 3, the task description needs to change
 
 The biggest finding from testing both patterns: **how you describe your tools matters 10× more** than whether you use ReAct or Plan-Execute.
 
 ### Tool Use
 
-- **Tool descriptions are the most important thing.** A vague description like "gets order info" causes the agent to pick the wrong tool **15-30% of the time.** A specific description like "Look up order status, total, and shipping details. Use when a customer asks about their order. Returns JSON with id, status, and total" makes it pick correctly almost every time. This is the **cheapest quality improvement** for any agent
-- **Limit to 15 tools per agent.** Beyond that, similar-sounding tools confuse the model. If you need more, create multiple specialized agents
-- **The LLM decides which tool to use and what inputs to send. Your code executes the tool.** The LLM never runs anything directly — that is the safety boundary. Always validate inputs on your server before executing
-- **Require human approval for sensitive actions** like processing refunds, deleting data, or deploying code
+- **Tool Descriptions Are the Most Important Thing**
+  - A vague description like "gets order info" causes the agent to pick the wrong tool **15-30% of the time**
+  - A specific description like "Look up order status, total, and shipping details. Use when a customer asks about their order. Returns JSON with id, status, and total" makes it pick correctly almost every time
+  - This is the **cheapest quality improvement** for any agent system
+
+- **Tool Limit**
+  - Keep to a maximum of **15 tools per agent**
+  - Beyond that, similar-sounding tools confuse the model
+  - If you need more, create multiple specialized agents that each handle a specific domain
+
+- **Safety Boundary**
+  - The LLM decides which tool to use and what inputs to send
+  - **Your code executes the actual tool.** The LLM never runs anything directly
+  - Always validate inputs on your server before executing
+
+- **Sensitive Actions**
+  - Require human approval for actions like processing refunds, deleting data, or deploying code
+  - Never let the agent auto-execute high-stakes operations
 
 ### Frameworks
 
-- **LangGraph** — build your agent as a flowchart with states, conditions, and loops. Can save progress and resume after a crash. Can pause and wait for human approval. This is the **production standard for 90% of agent use cases**
-- **CrewAI** — create multiple AI agents with specific roles (researcher, writer, reviewer) that work together. Good for quick prototypes. Less control over edge cases
-- **AutoGen** — agents that discuss and debate with each other. Good for reducing AI bias through structured disagreement
+- **LangGraph**
+  - Build your agent as a flowchart with states, conditions, and loops
+  - Can save progress and resume after a crash. Can pause and wait for human approval
+  - The **production standard for 90% of agent use cases**
+
+- **CrewAI**
+  - Create multiple AI agents with specific roles (researcher, writer, reviewer) that work together
+  - Good for quick prototypes. Less control over edge cases
+
+- **AutoGen**
+  - Agents that discuss and debate with each other
+  - Good for reducing AI bias through structured disagreement
+
 - Pick one framework and commit to it. **Mixing frameworks creates debugging nightmares**
 
 ### Multi-Agent
 
 - **Orchestrator-Worker** — one boss agent delegates tasks to specialist agents. The **most practical pattern** for production
 - **Debate** — two agents argue opposite sides, a judge agent decides. **Surprisingly effective** at reducing AI decision bias
-- **Peer Review** — agents review each other's work before submitting. Extra cost but catches mistakes
-- Keep teams to **2-4 agents maximum.** Each agent needs 3-5 LLM calls. A team of 4 agents uses about 15-20 API calls per task
+- **Peer Review** — agents review each other's work before submitting. Extra cost but catches mistakes that a single agent misses
+- Keep teams to **2-4 agents maximum.** Each agent needs 3-5 LLM calls. A team of 4 agents uses about **15-20 API calls per task**
 
 ### Memory
 
-- **Short-Term** — keep the last 10 messages in the conversation. **Always use this.** Without it, the agent forgets what you said 5 messages ago. When the limit is reached, oldest messages drop off
-- **Long-Term** — summarize past conversations and store them. When the user returns, the agent knows their history. 50 messages compressed into 3 sentences saves **50× the token space**
-- **Entity Memory** — remember facts about specific people or things ("this customer prefers email, is on the Pro plan, had a billing issue in March"). Like an automatic customer database
-- **Token budget:** plan how much space each part gets — system instructions (1,000 tokens) + tool descriptions (1,000) + memory (3,000) + user question (1,000) + answer (2,000) = **8,000 total**
+- **Short-Term**
+  - Keep the last 10 messages in the conversation window
+  - **Always use this.** Without it, the agent forgets what the user said 5 messages ago
+  - When the limit is reached, the oldest messages drop off
+
+- **Long-Term**
+  - Summarize past conversations and store them. When the user returns, the agent knows their history
+  - 50 messages compressed into 3 sentences saves **50× the token space**
+  - Add when personalization matters
+
+- **Entity Memory**
+  - Remember specific facts about people or things
+  - "This customer prefers email, is on the Pro plan, had a billing issue in March"
+  - Like an automatic customer database that builds itself from conversations
+
+- **Token Budget**
+  - Plan how much space each part gets in the context window
+  - System instructions (1,000 tokens) + tool descriptions (1,000) + memory (3,000) + user question (1,000) + answer (2,000) = **8,000 total**
 
 ### Safety
 
-- **Without a step limit,** an agent given an impossible task will retry the same action over and over forever. Set a maximum of **5-10 steps.** This is non-negotiable. We tested this — the difference is between a $0.15 task and a **$50 runaway bill**
-- **Stuck detection:** if the agent gets the exact same result 3 times in a row, force it to try something different or stop
-- **Risk tiers for actions:** searching a database = execute automatically. Processing a refund = wait for human approval. Deploying to production = always blocked without explicit approval
-- **Never run AI-generated code on your own server.** Use a sandboxed environment that auto-destroys after each use. About $0.10 per hour
+- **Step Limits**
+  - Without a limit, an agent given an impossible task will retry the same action over and over forever
+  - Set a maximum of **5-10 steps per task.** This is non-negotiable
+  - We tested this — the difference is between a $0.15 task and a **$50 runaway bill**
+
+- **Stuck Detection**
+  - If the agent gets the exact same result 3 times in a row, force it to try something different or stop gracefully
+  - Catches loops that a simple step limit might miss
+
+- **Risk Tiers**
+  - Searching a database = execute automatically
+  - Processing a refund = wait for human approval
+  - Deploying to production = always blocked without explicit authorization
+
+- **Sandboxed Code Execution**
+  - Never run AI-generated code on your own server
+  - Use an isolated environment that auto-destroys after each use
+  - About $0.10 per hour for a cloud sandbox
 
 ---
 
@@ -190,50 +456,91 @@ The biggest finding from testing both patterns: **how you describe your tools ma
 
 ### Methods — Try in This Order
 
-- **QLoRA** — compress the model to 4-bit precision first, then add small trainable layers. A 70 billion parameter model that normally needs 4 GPUs **(140 gigabytes)** fits on **1 GPU (35 gigabytes).** Quality stays at **97%.** This is always where you should start
-- **LoRA** — add small trainable layers without compressing the model. Reaches **95-99% quality.** Needs more hardware than QLoRA. Try this only if QLoRA has a quality gap larger than 2%
-- **Full Fine-Tuning** — update every single parameter in the model. Maximum quality but a 70 billion parameter model needs **4 GPUs (280 gigabytes).** Rarely justified unless you have a specific quality requirement that nothing else meets
+- **QLoRA (Quantized Low-Rank Adaptation)**
+  - Compress the model to 4-bit precision first, then add small trainable layers on top
+  - A 70 billion parameter model that normally needs **4 GPUs (140 gigabytes)** fits on **1 GPU (35 gigabytes)**
+  - Quality stays at **97%** of the full model
+  - This is **always where you should start.** Try this before anything else
 
-**The golden rule:** a large model at 97% quality (quantized 70 billion) produces better output than a small model at 100% quality (full-precision 13 billion). Always pick the bigger model and compress it.
+- **LoRA (Low-Rank Adaptation)**
+  - Add small trainable layers without compressing the model first
+  - Reaches **95-99% quality.** Needs more hardware than QLoRA
+  - Try this only if QLoRA has a quality gap larger than 2%
+
+- **Full Fine-Tuning**
+  - Update every single parameter in the model
+  - Maximum quality but a 70 billion parameter model needs **4 GPUs (280 gigabytes)**
+  - Rarely justified unless you have a specific quality requirement that nothing else meets
+
+**The golden rule:** a large model compressed to 97% quality always produces better output than a small model at 100% quality. Always pick the bigger model and compress it.
 
 ### Data
 
-- **Quality matters more than quantity.** Research showed that 1,000 carefully written examples beat 52,000 automatically generated ones (LIMA paper). Every example needs to be correct, consistent, and representative
-- **Every production bug becomes a new training example.** The failures your model makes in the real world are exactly what it needs to learn from. Over time, your training data grows from real experience
-- **Data formats:** Alpaca (single question and answer), ShareGPT (multi-turn conversations), ChatML (the production standard — match whatever format your API uses)
-- **Remove near-duplicate examples.** Balance your categories evenly. Have humans check **5%** of your data for errors
+- **Quality Over Quantity**
+  - Research showed that 1,000 carefully written examples beat 52,000 automatically generated ones (the LIMA paper)
+  - Every example must be correct, consistent, and representative of real usage
+
+- **Learn from Production Failures**
+  - Every bug your model makes in the real world becomes a new training example
+  - Over time, your training data grows from real experience and covers the exact edge cases your users hit
+
+- **Data Formats**
+  - Alpaca format: single question and answer pairs
+  - ShareGPT format: multi-turn conversations
+  - ChatML format: the production standard. Match whatever format your API uses
+
+- **Quality Checks**
+  - Remove near-duplicate examples that waste training time
+  - Balance your categories evenly so the model does not over-learn one type
+  - Have humans manually check **5%** of your data for errors
 
 ### Alignment — Teaching the Model to Behave
 
-- **Step 1: Supervised Fine-Tuning (SFT)** — train the model on examples of good instruction-following. You need **1,000-5,000 examples.** This teaches the model to actually follow your instructions instead of ignoring them. **Never skip this step**
-- **Step 2: Direct Preference Optimization (DPO)** — show the model pairs of responses and tell it which one is better. It learns to prefer the good style over the bad style. The modern standard for alignment. Needs **5,000-10,000 pairs** of [prompt, good response, bad response]
-- **Alternative: KTO** — instead of full pairs, just needs thumbs up or thumbs down on individual responses. Much easier to collect this kind of feedback
-- **Alternative: RLAIF** — instead of human judges, use GPT-4 to decide which response is better. Gets **80% of human quality at 10% of the cost.** $10 for 5,000 judgments instead of $2,000
-- Doing DPO on a model that has not been through SFT first is like **polishing a brick** — the surface looks nice but the foundation is broken
+- **Step 1: Supervised Fine-Tuning (SFT)**
+  - Train the model on examples of good instruction-following behavior
+  - You need **1,000-5,000 examples** of [instruction, ideal response]
+  - This teaches the model to actually follow your instructions instead of ignoring them
+  - **Never skip this step.** Everything else builds on top of this foundation
+
+- **Step 2: Direct Preference Optimization (DPO)**
+  - Show the model pairs of responses and tell it which one humans prefer
+  - The model learns to produce output more like the preferred response
+  - The modern standard for alignment. Needs **5,000-10,000 pairs** of [prompt, good response, bad response]
+
+- **Alternative: KTO**
+  - Instead of full preference pairs, just needs thumbs up or thumbs down on individual responses
+  - Much easier to collect this kind of feedback from real users
+
+- **Alternative: RLAIF**
+  - Instead of human judges, use GPT-4 to decide which response is better
+  - Gets **80% of human quality at 10% of the cost**
+  - $10 for 5,000 judgments instead of $2,000 for human annotators
+
+- Doing preference optimization on a model that has not been through supervised fine-tuning first is like **polishing a brick** — the surface looks nice but the foundation is broken
 
 ### Synthetic Data — Creating Training Data Cheaply
 
-- Start with **5 perfect examples** written by hand. These set the quality standard
+- Start with **5 perfect examples** written by hand. These set the quality standard for everything generated afterward
 - Ask GPT-4 to generate hundreds more examples in the same style
-- Use an LLM judge to **score each example from 1 to 10.** Keep only those scoring 7 or above
+- Use an LLM judge to **score each generated example from 1 to 10.** Keep only those scoring 7 or above
 - Have humans spot-check **5%** of the kept examples as a final quality gate
-- Generate twice as many as you need, keep the top half
+- Generate twice as many as you need and keep the top half
 - Cost: **$0.01 per example** versus $2.00 per example from human writers
 
 ### Quantization — Making Big Models Fit on Small Hardware
 
-- **Full Precision (FP16)** — no compression. A 70 billion parameter model needs 140 gigabytes. **Almost never used** in production because it is too expensive
-- **8-bit (INT8)** — light compression. 99% quality. 70 gigabytes. Use when 4-bit has a measurable quality problem
-- **4-bit (INT4)** — the **production sweet spot.** 97% quality. 35 gigabytes. One GPU instead of four. This is where most teams end up
-- **AWQ** — a smarter version of 4-bit compression. Best quality at the same size. Use for GPU-based production serving
-- **GGUF Q4_K_M** — a 4-bit format designed for running on CPUs and with Ollama on laptops. Best balance for local deployment
-- **Never go below 4-bit.** Quality drops sharply at 3-bit — the savings are not worth the degradation
+- **Full Precision (FP16)** — no compression. A 70 billion parameter model needs 140 gigabytes across 4 GPUs. **Almost never used** in production because it is too expensive
+- **8-bit (INT8)** — light compression. 99% quality retained. 70 gigabytes. Use when 4-bit has a measurable quality problem
+- **4-bit (INT4)** — the **production sweet spot.** 97% quality. 35 gigabytes on a single GPU. This is where most teams end up
+- **AWQ** — a smarter version of 4-bit compression that preserves the most important weights. Best quality at the same size. Use for GPU-based serving
+- **GGUF Q4_K_M** — a 4-bit format designed for CPUs and Ollama. Best balance for running models on laptops and edge devices
+- **Never go below 4-bit.** Quality drops sharply at 3-bit — the storage savings are not worth the quality loss
 
 ### Platforms
 
-- **OpenAI Fine-Tuning** — upload your data, they handle everything. Simplest option. About $25 per million tokens
+- **OpenAI Fine-Tuning** — upload your data, they handle everything. The simplest option. About $25 per million tokens
 - **Together AI** — fine-tune open-source models for $5-10 per million tokens. You can download and own the resulting model
-- **Self-Hosted (Axolotl + Unsloth)** — run everything on your own hardware. Your data never leaves your servers. Full control over every setting
+- **Self-Hosted (Axolotl + Unsloth)** — run everything on your own hardware. Your data never leaves your servers. Full control
 - Managed platforms are cheaper when you process **under 1 million tokens per day.** Self-hosting is cheaper above that
 
 ---
@@ -242,19 +549,19 @@ The biggest finding from testing both patterns: **how you describe your tools ma
 
 ### Frameworks
 
-- **Raw API calls** — just call the LLM API directly with no framework. Best for simple applications and for learning how things work. Maximum control, no extra dependencies
-- **LangChain LCEL** — connect components with a pipe operator: prompt | model | parser. Gives you streaming, batching, retries, and fallbacks automatically. The older Chain classes are deprecated — use only LCEL
-- **LangGraph** — build agents as state machines with conditions, loops, and checkpoints. Can save progress and resume after a crash. Can pause for human approval. This is the **production standard for 90% of agent use cases**
-- **LlamaIndex** — specialized for search and retrieval applications. 150+ built-in connectors for data sources. What takes 800 lines in LangChain often takes **50 lines in LlamaIndex**
+- **Raw API Calls** — call the LLM directly with no framework. Best for simple applications and learning. Maximum control, no extra dependencies
+- **LangChain LCEL** — connect components with a pipe operator (prompt | model | parser). Gives you streaming, batching, retries, and fallbacks automatically. The older Chain classes are deprecated
+- **LangGraph** — build agents as state machines with conditions, loops, and checkpoints. Can save progress and resume after crashes. Can pause for human approval. The **production standard for 90% of agent use cases**
+- **LlamaIndex** — specialized for search and retrieval. 150+ built-in connectors. What takes 800 lines in LangChain often takes **50 lines in LlamaIndex**
 - **Semantic Kernel** — Microsoft's framework. Works in Python, C#, and Java. Makes sense if your stack is Azure and .NET
-- **Haystack** — German-engineered framework that checks your pipeline connections at build time. Catches errors before runtime
+- **Haystack** — checks your pipeline connections at build time and catches errors before runtime
 
 ### Anti-Patterns
 
-- **Adding a framework before you need one** — build the simplest version first with raw API calls. Add a framework only when you hit a specific pain it solves
-- **Calling framework functions directly everywhere** — wrap them in your own interfaces. When you need to switch frameworks, you change one file instead of hundreds
-- **Using multiple frameworks together** — pick one and commit. Mixing LangChain and LlamaIndex and Haystack creates debugging problems that are not worth the marginal benefits
-- **Chasing framework version updates** — pin your version. Test upgrades deliberately instead of updating blindly
+- **Adding a framework before you need one** — build the simplest version first with raw API calls. Add a framework only when you hit a specific problem it solves
+- **Calling framework functions directly everywhere** — wrap them in your own interfaces. When you need to switch, you change one file instead of hundreds
+- **Using multiple frameworks together** — pick one and commit. Mixing creates debugging problems that are not worth the marginal benefits
+- **Chasing version updates** — pin your framework version. Test upgrades deliberately instead of updating blindly
 
 ---
 
@@ -263,24 +570,24 @@ The biggest finding from testing both patterns: **how you describe your tools ma
 ### Metrics
 
 - **BERTScore** — compares the meaning of two texts using embeddings, not exact word matching. The best metric when you have a correct reference answer to compare against
-- **LLM-as-Judge (score 1-10)** — ask a powerful model to rate the quality of a response. Agrees with human raters **80-90%** of the time. Costs **$0.002 per evaluation** versus $0.20 for a human rater
-- **LLM-as-Judge (A versus B)** — show a powerful model two responses and ask which is better. Good for comparing different prompts or models. **Always randomize** which response is shown first because the model has a bias toward the first one
-- **RAGAS** — four metrics specifically for Retrieval Augmented Generation systems: precision, recall, faithfulness, and relevance. Each one diagnoses a different problem and points to a specific fix
+- **LLM-as-Judge (score 1-10)** — ask a powerful model to rate the quality of a response. Agrees with human raters **80-90%** of the time. Costs **$0.002 per evaluation** versus $0.20 for a human
+- **LLM-as-Judge (A versus B)** — show a powerful model two responses and ask which is better. Good for comparing prompts or models. **Always randomize** which response is shown first — the model has a bias toward the first one
+- **RAGAS** — four metrics specifically for Retrieval Augmented Generation: precision, recall, faithfulness, and relevance. Each one diagnoses a different problem and points to a specific fix
 
 ### Testing
 
-- **Golden test suite:** a collection of 200+ questions with known correct answers. Every time you change a prompt, run the full suite. If any test fails, the deploy is blocked. **Every bug found in production becomes a new test case** — the suite grows from real experience
-- **Adversarial testing:** use tools like garak (runs **100+ automated attack patterns**) and promptfoo (lets you write assertion-based tests) to find vulnerabilities before your users do. Run before every launch
-- **Always include impossible questions.** If your model never says "I do not know," it is guessing on everything and you cannot trust any of its answers
-- **A/B testing:** send 10% of traffic to the new prompt version, monitor the metrics for 24 hours, then roll out to everyone or roll back. Need at least **1,000 samples** for statistically meaningful results
+- **Golden Test Suite** — 200+ questions with known correct answers. Every time you change a prompt, run the full suite. If any test fails, the deploy is blocked. **Every bug from production becomes a new test case**
+- **Adversarial Testing** — tools like garak (runs **100+ automated attack patterns**) and promptfoo (assertion-based tests). Run before every launch to find vulnerabilities
+- **Impossible Questions** — always include questions that have no correct answer. If the model never says "I do not know," it is guessing on everything
+- **A/B Testing** — send 10% of traffic to the new version, monitor for 24 hours, then roll out or roll back. Need at least **1,000 samples** for meaningful results
 
 ### Observability
 
-- **Log every LLM call:** the input, the output, which model was used, how many tokens it consumed, how long it took, and how much it cost. **Start on day one.** Retrofitting observability later is 10× harder because you need to change every call site
-- **Platforms:** LangSmith (built for LangChain users) or LangFuse (open-source, you host it yourself, works with any framework)
-- **Dashboards:** track the 50th, 95th, and 99th percentile of latency, the error rate, and the daily cost
-- **Alerts:** page the on-call engineer when errors exceed 2%, when 95th percentile latency exceeds 5 seconds, or when daily cost exceeds 80% of the budget
-- **Per-user tracking:** monitor token usage per user with rate limits and daily budgets to prevent one aggressive user from consuming the entire quota
+- **Log Every LLM Call** — the input, the output, which model, how many tokens, how long it took, how much it cost. **Start on day one.** Adding observability later is 10× harder
+- **Platforms** — LangSmith (built for LangChain) or LangFuse (open-source, self-hosted, works with any framework)
+- **Dashboards** — track the 50th, 95th, and 99th percentile of latency, the error rate, and the daily cost
+- **Alerts** — page the on-call engineer when errors exceed 2%, latency exceeds 5 seconds at the 95th percentile, or cost exceeds 80% of the daily budget
+- **Per-User Tracking** — monitor token usage per user. Set rate limits and daily budgets to prevent one user from consuming the entire quota
 
 ---
 
@@ -288,34 +595,34 @@ The biggest finding from testing both patterns: **how you describe your tools ma
 
 ### Serving — What Runs the Model
 
-- **vLLM** — the **production standard** for self-hosted models. Uses a technique called PagedAttention that handles **2-4× more concurrent users** on the same hardware. Also includes continuous batching (the GPU never sits idle between requests) and speculative decoding (a small fast model guesses ahead, the big model verifies in bulk)
-- **TGI (Text Generation Inference)** — a Docker-friendly serving engine from HuggingFace. Simpler to set up than vLLM
-- **TensorRT-LLM** — NVIDIA's maximum-performance engine. **30-50% faster** than vLLM but more complex to set up and locked to NVIDIA hardware
-- **Ollama** — run models locally with one command. 50+ models available. Great for development and testing. **Not suitable for production**
+- **vLLM** — the **production standard** for self-hosted models. Uses PagedAttention to handle **2-4× more concurrent users** on the same hardware. Also includes continuous batching (GPU never sits idle) and speculative decoding (a small model guesses ahead, the big model verifies)
+- **TGI** — a Docker-friendly engine from HuggingFace. Simpler to set up than vLLM
+- **TensorRT-LLM** — NVIDIA's maximum-performance engine. **30-50% faster** but more complex and locked to NVIDIA
+- **Ollama** — run models locally with one command. Great for development. **Not suitable for production**
 - **llama.cpp** — run models on CPU without a GPU. Useful for edge devices and laptops
 
 ### Gateway and Routing
 
-- **LiteLLM** — a universal proxy that sits in front of **100+ LLM providers.** Switch from OpenAI to Anthropic by changing one configuration string. Handles fallbacks, load balancing, and budget tracking automatically. Every production application should have a gateway
-- **Fallback chain** — configure a primary provider, a secondary, and a local backup. If the primary goes down, traffic automatically shifts. Health check every **30 seconds** to detect outages
-- **Model routing** — 70% of real production queries are simple ("what are your business hours?"). Route those to the cheap model. Only send complex queries to the expensive model. This saves **60-70%.** At 100,000 queries per day, that is **over $1,000 per day saved**
-- **Cascading** — try the cheap model first. If its response seems uncertain (hedging words, low confidence), automatically escalate to the expensive model
-- **Domain override** — some domains like medical or legal cannot tolerate quality drops. Hard-code these to always use the best available model
+- **LiteLLM Gateway** — a universal proxy that sits in front of **100+ LLM providers.** Switch providers by changing one configuration string. Handles fallbacks, load balancing, and budget tracking. Every production application should have this
+- **Fallback Chain** — primary provider → secondary → local backup → graceful error. Health check every **30 seconds** to detect outages automatically
+- **Model Routing** — 70% of production queries are simple. Route those to the cheap model. Only complex queries go to the expensive model. Saves **60-70%.** At 100,000 queries per day: **over $1,000 per day saved**
+- **Cascading** — try the cheap model first. If its response seems uncertain, automatically escalate to the expensive model
+- **Domain Override** — medical and legal queries always go to the best available model. Some domains cannot tolerate quality compromises
 
 ### Deployment
 
-- **Server-Sent Events streaming** — instead of waiting for the entire response before showing anything, push each word to the user as the model generates it. First word appears in **under 500 milliseconds** versus a 2-3 second blank screen. Users perceive the application as **3-5× faster** even though the total generation time is the same
-- **Docker** — use the nvidia/cuda base image for GPU access. Mount model weights as a volume instead of baking them into the image (model files are too large for Docker images)
-- **Kubernetes** — autoscale based on **queue length,** not CPU utilization. LLM workloads are GPU-bound. CPU sits at 5% while the GPU is maxed out. Queue length is the real signal
+- **Streaming** — push each word to the user as the model generates it. First word in **under 500 milliseconds** versus a 2-3 second blank screen. Users perceive **3-5× faster** even though total time is the same
+- **Docker** — use the nvidia/cuda base image. Mount model weights as a volume instead of putting them in the image (model files are too large)
+- **Kubernetes** — autoscale based on **queue length,** not CPU utilization. LLM workloads are GPU-bound
 
 ### Cloud Platforms
 
-- **AWS Bedrock** — for teams already on AWS. Enterprise compliance built in
-- **Azure OpenAI** — for teams already on Azure. Your data stays in your chosen region
-- **Google Cloud Vertex** — for teams already on Google Cloud. Access to Gemini and open-source models
-- **Groq** — the fastest API available. **10-50× faster** than standard providers. Limited model selection
-- **Together AI** — cheapest option for open-source models. You can download and own the fine-tuned result
-- Managed platforms are cheaper when you process **under 1 million tokens per day.** Self-hosting is cheaper above that
+- **AWS Bedrock** — for teams on AWS. Enterprise compliance built in
+- **Azure OpenAI** — for teams on Azure. Data stays in your chosen region
+- **Google Cloud Vertex** — for teams on Google Cloud. Gemini and open-source models
+- **Groq** — the fastest API. **10-50× faster** than standard providers. Limited model selection
+- **Together AI** — cheapest for open-source models. You can download the fine-tuned result
+- Managed platforms are cheaper **under 1 million tokens per day.** Self-hosting is cheaper above that
 
 ---
 
@@ -323,45 +630,45 @@ The biggest finding from testing both patterns: **how you describe your tools ma
 
 ### Protection
 
-- **PII pipeline** — use Microsoft Presidio (detects **30+ types** of personal information) to find and replace every email, phone number, SSN, and credit card number with a placeholder before the text reaches the LLM. The LLM sees "[EMAIL_0]" instead of the real address. After the response, swap the real values back in. The LLM **never sees real personal data**
-- **OpenAI Moderation API** — a **free** tool that checks text for toxicity, violence, self-harm, and other harmful content. Always enable this as the first checkpoint on every application
-- **Canary tokens** — plant a secret string inside your system prompt and scan every response for it. If the string ever appears in a response, you know your prompt has been extracted. **Zero cost** early warning system
-- **Dual-LLM architecture** — one model holds all the rules and makes decisions (privileged). A separate model sees only the user's message and generates text (quarantined). The generation model never has access to the rules. **Most secure architecture.** Used in banking and healthcare. Costs 2× more
+- **PII Pipeline** — use Microsoft Presidio (detects **30+ types** of personal information) to replace every email, phone, SSN, and credit card with a placeholder before the LLM sees it. After the response, swap real values back. The LLM **never touches real personal data**
+- **Moderation API** — OpenAI offers a **free** tool that checks text for toxicity, violence, and harmful content. Enable as the first checkpoint on every application
+- **Canary Tokens** — plant a secret string in your system prompt and scan every response for it. If it appears, your prompt has been extracted. **Zero cost** early warning
+- **Dual-LLM** — one model holds rules and makes decisions (privileged). A separate model generates text (quarantined). The generator never accesses the rules. **Most secure.** Banking and healthcare. 2× cost
 
 ### Hallucination Defense
 
-- **Grounding instruction** — add one line to your prompt: "answer ONLY from the provided context." This is the **number one defense** against hallucination. Drops fabrication rates from 50%+ to under 10%
-- **Citations** — require the model to cite [Source: document name, page number] for every claim. Users can verify the answer, and the model becomes more careful when it has to point to where it found the information
-- **Confidence scoring** — ask the model to rate its own certainty from 1 to 10. When confidence is low, add a disclaimer or route to a human instead of serving an uncertain answer
-- **Abstention training** — teach the model that saying "I do not know" is better than guessing. If your model never abstains, **it is guessing on everything** and you cannot trust any individual answer
+- **Grounding** — "answer ONLY from the provided context." **Number one defense.** Drops fabrication from 50%+ to under 10%
+- **Citations** — require the model to cite source and page number. Users can verify. Model becomes more careful when it has to show its sources
+- **Confidence Scoring** — ask the model to rate certainty 1-10. Low confidence → add a disclaimer or route to a human
+- **Abstention** — teach the model that saying "I do not know" is better than guessing. **If your model never abstains, it is guessing on everything**
 
 ### Guardrails
 
-- **Guardrails AI** — validates the model's output against your rules and automatically retries if the output violates them. Good for enforcing structured output formats
-- **NeMo Guardrails** — defines what topics the bot is allowed to discuss and what it must refuse. Uses a special language called Colang to set conversation boundaries
-- **LLM Guard** — drop-in security scanners for both input and output. Checks for injection attacks, personal information leaks, and toxic content
-- Combine LLM Guard for security and NeMo for conversation control. All guardrail systems add **50-200 milliseconds** of latency — budget for this in your response time targets
+- **Guardrails AI** — validates output against rules and automatically retries if it violates them
+- **NeMo Guardrails** — defines what topics the bot can and cannot discuss
+- **LLM Guard** — drop-in security scanners for injection, personal information, and toxicity
+- Combine LLM Guard for security and NeMo for conversation control. All add **50-200 milliseconds** of latency
 
 ### Compliance
 
-- **EU AI Act** — requires risk assessment, bias testing, and transparency for high-risk AI systems. **Mandatory** for applications deployed in the European Union
-- **GDPR** — requires minimizing personal data collection, providing the right to deletion, and obtaining informed consent. Auto-delete logs containing personal data after **30 days**
-- **HIPAA** — strict rules for handling protected health information in the United States. Self-hosting the model is typically required so health data never leaves your servers
-- **Model cards** — document what every deployed model can do, what it was trained on, its known limitations, and ethical considerations. Version every prompt in git. A/B test every change with at least 1,000 samples
+- **EU AI Act** — risk assessment, bias testing, transparency. **Mandatory** for high-risk AI in Europe
+- **GDPR** — minimize personal data. Right to deletion. Informed consent. Auto-delete logs after **30 days**
+- **HIPAA** — protected health information rules. Self-hosting typically required
+- **Model cards** — document what every model can do, its limitations, and ethical considerations
 
 ---
 
 ## Multimodal
 
-- **GPT-4o Vision** — the model can look at images and extract information. The detail setting controls quality and cost: low detail uses **85 tokens** per image, high detail uses **1,000+ tokens.** That is a **10× cost difference.** Always start with low
+- **GPT-4o Vision** — the model can analyze images. Low detail uses **85 tokens** per image. High detail uses **1,000+ tokens.** That is **10× cost difference.** Always start with low
 - **Claude Vision** — particularly strong on dense text documents and long screenshots
-- **Gemini Vision** — can process multiple images in a single request and has the largest context window
-- **LLaVA** — an open-source vision model you can run on your own hardware. Nothing leaves your server
-- **Whisper** — converts speech to text in **100+ languages.** The API costs $0.006 per minute. Self-hosting is free
-- **Text-to-Speech** — OpenAI TTS ($15 per million characters, 6 voices). ElevenLabs (best quality, can clone a voice from 30 seconds of audio)
-- **CLIP and Jina-CLIP** — put text and images into the same number space so you can search images with text queries and vice versa
-- **Voice agent pipeline** — user speaks → Whisper converts to text → LLM generates answer → text-to-speech reads it out. Target: **under 1 second** total latency
-- **Production rule:** before building complex multimodal pipelines, try converting everything to text first (tables to markdown, images to descriptions, audio to transcripts). This gets **90% of the value with zero infrastructure changes**
+- **Gemini Vision** — processes multiple images and has the largest context window
+- **LLaVA** — open-source vision model. Run on your own hardware. Nothing leaves your server
+- **Whisper** — speech to text in **100+ languages.** API: $0.006 per minute. Self-hosted: free
+- **Text-to-Speech** — OpenAI TTS ($15 per million characters). ElevenLabs (best quality, voice cloning from 30 seconds of audio)
+- **CLIP and Jina-CLIP** — search images with text and text with images by putting both in the same number space
+- **Voice Agent** — user speaks → Whisper → LLM → text-to-speech → user hears answer. Target: **under 1 second total**
+- **Production Rule** — convert everything to text first (tables to markdown, images to descriptions, audio to transcripts). Gets **90% of the value with zero infrastructure changes**
 
 ---
 
@@ -369,40 +676,40 @@ The biggest finding from testing both patterns: **how you describe your tools ma
 
 ### Patterns
 
-- **Gateway (LiteLLM)** — a single entry point for all LLM providers. Switching from one provider to another requires changing **one configuration string** — no code changes
-- **Semantic cache** — if someone asks "what is your refund policy?" and five minutes later someone asks "how do returns work?", the cache recognizes these mean the same thing and returns the saved answer. Hit rate: **30-40%.** Each hit costs zero and returns in 10 milliseconds instead of 1-2 seconds
-- **Model routing** — classify each incoming query as simple or complex. Simple queries go to the cheap model, complex to the expensive one. Saves **60-70%** because 70% of real traffic is simple
-- **Compound AI** — instead of one big expensive model doing everything, build separate specialized components: a classifier, a retriever, a generator, guardrails, and a cache. Each component can be tested, replaced, and scaled independently. **80-90% cheaper** than a monolith
-- **MapReduce** — split large documents into pieces, process each piece in parallel with the cheap model, then combine all results with the smart model. Handles unlimited document sizes
-- **Iterative refinement** — generate a response, get a critique, rewrite based on the critique. Quality improves about **+2 points per round** on a 1-10 scale. Three rounds is the sweet spot
-- **Fallback chain** — primary provider → secondary → local model → graceful error message. Timeout of **2-3 seconds** before switching to the next provider
+- **Gateway (LiteLLM)** — single entry point for all providers. Switch providers by changing **one configuration string**
+- **Semantic Cache** — "refund policy?" and "how do returns work?" mean the same thing. Cache recognizes this. Hit rate: **30-40%.** Each hit: zero cost, 10 milliseconds
+- **Model Routing** — simple queries → cheap model. 70% of traffic. Saves **60-70%**
+- **Compound AI** — classifier + retriever + generator + guardrails + cache as separate components. Each independently testable. **80-90% cheaper** than one big model
+- **MapReduce** — cheap model processes pieces in parallel, smart model combines once. **Unlimited document size**
+- **Iterative Refinement** — generate → critique → rewrite. **+2 quality points per round.** Three rounds is the sweet spot
+- **Fallback Chain** — primary → secondary → local → error. Timeout **2-3 seconds** before switching
 
 ### Design Rules
 
-- **Async everywhere** — LLM calls take 1-3 seconds. If your code blocks while waiting, you can serve about 5 users at a time. With async (non-blocking) calls, you can serve **500.** This is non-negotiable
-- **Circuit breaker** — if a provider fails 5 times in a row, stop trying and route to the fallback. Periodically test if the provider has recovered. Prevents cascading failures
-- **Token budget** — plan how much context space each component gets. When conversation history grows too long, summarize older messages to free up space
-- **Idempotency** — if a network timeout causes a retry, the action should not execute twice. Use idempotency keys on every write operation
+- **Async Everywhere** — LLM calls take 1-3 seconds. Blocking code serves about 5 users. Non-blocking serves **500.** This is non-negotiable
+- **Circuit Breaker** — 5 failures in a row → stop trying → route to fallback → periodically test if the provider recovered
+- **Token Budget** — plan how much context space each component gets. When history grows too long, summarize older messages
+- **Idempotency** — if a network timeout causes a retry, the action should not execute twice. Use idempotency keys on every write
 
 ### Data Architecture
 
-- **Embedding pipeline** — extract text from documents → break into chunks → remove duplicate chunks (hash-based deduplication saves **10-30%** on embedding costs) → convert to embeddings → store with metadata
-- **Metadata on every chunk** — always attach the source, date, and document type. Filtering by metadata **before** running vector search dramatically improves results
-- **Incremental updates** — when a document changes, only re-process that document instead of re-embedding everything. Track the last modified timestamp
-- **Zero-downtime re-indexing** — when you need to change your embedding model (which means re-processing everything), build the new index alongside the old one and swap them atomically. Users never see downtime
+- **Embedding Pipeline** — extract → chunk → deduplicate (hash-based, saves **10-30%**) → embed → store with metadata
+- **Metadata** — attach source, date, and type to every chunk. Filtering by metadata **before** vector search improves results dramatically
+- **Incremental Updates** — when a document changes, only reprocess that document. Track the last modified timestamp
+- **Zero-Downtime Re-Index** — when changing embedding models, build the new index alongside the old one and swap atomically. Users never see downtime
 
 ---
 
 ## Advanced and Emerging
 
-- **Model Context Protocol (MCP)** — a standard way to connect any tool to any LLM, like USB-C for AI. Build one server and it works with Claude, GPT, Gemini, and local models. Before MCP: 50 custom integrations. With MCP: one standard protocol. FastMCP lets you build a server in **20 lines of code**
-- **Compound AI systems** — multiple specialized components working together instead of one big model. Each component has a single responsibility. **80-90% cheaper** than a monolith. Each piece is independently testable and replaceable
-- **GraphRAG** — extract entities and relationships from your documents and build a knowledge graph. This lets you answer questions that require following chains across multiple documents. Regular search finds individual pieces. Graph traversal follows the whole chain. Worth building when **20% or more** of your queries need cross-document connections
-- **Knowledge distillation** — use a powerful expensive model (the teacher) to label your data, then fine-tune a small cheap model (the student) on those labels. The student achieves **85-95% of the teacher's quality** at **1/30th the cost.** Combined with quantization: **100× cheaper** than the original teacher
-- **Mixture of Experts (MoE)** — models like Mixtral have 8 expert sub-networks but only activate 2 of them for each word. Total knowledge of a 47 billion parameter model, but the speed and cost of a 13 billion parameter model
-- **Context compression (LLMLingua)** — automatically removes filler words and redundant phrases from text before feeding it to the LLM. Shrinks 10,000 words to 3,000 while retaining **90% of the quality.** Use when your text barely exceeds the context window
-- **Local inference** — Ollama (one command to download and run any model), llama.cpp (runs on CPU without a GPU), MLX (fastest on Apple Silicon). Good for development and privacy-sensitive work. Deploy to the cloud for production
-- **LLMOps** — version prompts in git → run the golden test suite → deploy to 10% of users for 24 hours → monitor → roll out to everyone or roll back instantly. **Every bug becomes a new test case.** Treat prompt changes with the same discipline as code changes
+- **Model Context Protocol (MCP)** — a standard way to connect any tool to any LLM, like USB-C replaced different charging cables. Build one server and it works with Claude, GPT, Gemini, and local models. FastMCP: **20 lines of code**
+- **Compound AI** — specialized components working together instead of one model doing everything. **80-90% cheaper.** Each component independently testable and replaceable
+- **GraphRAG** — build a knowledge graph from documents. Answer questions that require following chains across multiple documents. Worth building when **20%+ of queries** need cross-document connections
+- **Distillation** — powerful model labels data (teacher), small model learns from those labels (student). Student achieves **85-95% quality at 1/30th cost.** Combined with quantization: **100× cheaper**
+- **Mixture of Experts** — models like Mixtral have 8 expert sub-networks but only 2 are active per word. Total knowledge of 47 billion parameters, speed of 13 billion
+- **Context Compression** — automatically removes filler words before feeding text to the LLM. Shrinks 10,000 words to 3,000 while keeping **90% quality**
+- **Local Inference** — Ollama (one command), llama.cpp (CPU), MLX (Apple Silicon). Good for development and privacy. Deploy to cloud for production
+- **LLMOps** — version prompts in git → golden tests → deploy to 10% → monitor → roll out or roll back. **Every bug becomes a test case.** Treat prompts like code
 
 ---
 
